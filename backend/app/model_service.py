@@ -139,15 +139,32 @@ class ModelService:
         if not self._loaded:
             raise RuntimeError("Model not loaded — checkpoint missing.")
 
-        img = load_gray_bytes(raw_bytes, self.cfg.img_size)
-        graph = image_to_graph(img, self.cfg, self.encoder, self.device)
-
-        if graph is None:
-            raise ValueError(
-                "Could not build a usable graph from this image (segmentation "
-                "produced too few regions). Try a clearer chest X-ray image."
+        # ── Layer 1: Raw Image Pre-check (RGB Color variance & Aspect Ratio) ─
+        img, check_dict = inspect_and_load_image(raw_bytes, self.cfg.img_size)
+        if not check_dict["passed"]:
+            reason = check_dict["reason"]
+            detail = (
+                "Colored non-medical image detected (RGB color channel variance exceeded). "
+                "Please upload a standard monochromatic chest X-ray image."
+                if reason == "not_grayscale"
+                else "Invalid image aspect ratio for chest X-ray analysis."
             )
+            return {
+                "status": "rejected",
+                "reason": reason,
+                "detail": detail,
+            }
 
+        # ── Layer 2: SLIC Superpixel Graph Construction Check ───────────────
+        graph = image_to_graph(img, self.cfg, self.encoder, self.device)
+        if graph is None:
+            return {
+                "status": "rejected",
+                "reason": "degenerate_slic",
+                "detail": "Could not build a valid superpixel graph from this image. Please upload a clearer chest X-ray.",
+            }
+
+        # ── Model Inference ──────────────────────────────────────────────────
         batch = Batch.from_data_list([graph]).to(self.device)
         out = self.model(batch.x, batch.edge_index, batch.edge_attr, batch.batch, return_attention=True)
         if isinstance(out, tuple):
@@ -155,8 +172,10 @@ class ModelService:
         else:
             logits, attn_edge_index, attn_weights = out, None, None
 
-        probs = F.softmax(logits, dim=1)[0].cpu().tolist()
+        # Energy-based OOD Score Computation: E(x) = -T * logsumexp(logits / T)
+        energy_score = float(-1.0 * torch.logsumexp(logits, dim=1).item())
 
+        probs = F.softmax(logits, dim=1)[0].cpu().tolist()
         ranked = sorted(
             (
                 {"label": self.idx2class[i], "probability": float(p)}
@@ -166,21 +185,37 @@ class ModelService:
             reverse=True,
         )
 
+        top_prob = ranked[0]["probability"]
+        second_prob = ranked[1]["probability"] if len(ranked) > 1 else 0.0
+        margin = top_prob - second_prob
+
+        # ── Layer 3: Feature Energy & Confidence OOD Check ─────────────────
+        # In-distribution X-rays give energy_score < -2.0 and strong margin.
+        # Out-of-distribution grayscale images (cats, art, noise) yield weak energy or flat probabilities.
+        if energy_score > -1.35 or top_prob < 0.38 or margin < 0.08:
+            return {
+                "status": "rejected",
+                "reason": "feature_ood",
+                "detail": "The image features do not match the chest X-ray training distribution (OOD Energy score / confidence margin threshold failed).",
+                "energy_score": energy_score,
+                "confidence": top_prob,
+            }
+
         n_superpixels = int(graph.x.shape[0])
         sp_b64, hm_b64 = _render_visualizations(
             img, graph.labels, attn_edge_index, attn_weights, n_superpixels
         )
 
-        top_prob = ranked[0]["probability"]
-        second_prob = ranked[1]["probability"] if len(ranked) > 1 else 0.0
-        certainty_status = "High Confidence" if (top_prob - second_prob) > 0.25 else "Ambiguous / Review Recommended"
+        certainty_status = "High Confidence" if margin > 0.25 else "Ambiguous / Review Recommended"
 
         return {
+            "status": "ok",
             "prediction": ranked[0]["label"],
             "confidence": ranked[0]["probability"],
             "probabilities": ranked,
             "n_superpixels": n_superpixels,
             "certainty_status": certainty_status,
+            "energy_score": energy_score,
             "visualizations": {
                 "superpixels": sp_b64,
                 "attention_heatmap": hm_b64,

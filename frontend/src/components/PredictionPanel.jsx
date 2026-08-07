@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShieldCheck, AlertTriangle } from 'lucide-react';
+import { ShieldCheck, AlertTriangle, ShieldAlert, ImageOff } from 'lucide-react';
 import ConfidenceGauge from './ConfidenceGauge';
 
 export default function PredictionPanel({ results }) {
@@ -9,6 +9,42 @@ export default function PredictionPanel({ results }) {
         <div>Awaiting an image.</div>
         <div style={{ fontSize: '11px', color: 'var(--muted)' }}>
           Results, GNN explainability heatmaps<br />and per-class confidence will appear here.
+        </div>
+      </div>
+    );
+  }
+
+  if (results.status === 'rejected') {
+    const reasonLabels = {
+      not_grayscale: 'Colored Non-Medical Image',
+      invalid_aspect_ratio: 'Invalid Image Aspect Ratio',
+      degenerate_slic: 'Superpixel Segmentation Failed',
+      feature_ood: 'Out-Of-Distribution (OOD) Features',
+    };
+
+    return (
+      <div className="prediction-results ood-rejected-card">
+        <div className="ood-header">
+          <ShieldAlert size={32} color="var(--red)" />
+          <div>
+            <div className="ood-title">Prediction Withheld</div>
+            <div className="ood-subtitle">Non-Chest X-Ray / Out-Of-Distribution Detected</div>
+          </div>
+        </div>
+
+        <div className="badge-row" style={{ marginTop: 16 }}>
+          <span className="badge status-warn">
+            <ImageOff size={12} style={{ display: 'inline', marginRight: 4 }} />
+            Reason: {reasonLabels[results.reason] || results.reason}
+          </span>
+        </div>
+
+        <div className="ood-detail-box">
+          {results.detail}
+        </div>
+
+        <div className="disclaimer" style={{ marginTop: 24 }}>
+          To prevent overconfident false classifications (e.g. cat photos or screenshots), our 3-layer OOD filter rejects inputs outside the chest X-ray distribution.
         </div>
       </div>
     );
