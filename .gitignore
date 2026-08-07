@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Virtual Environments
+venv/
+.venv/
+env/
+
+# Node / Frontend
+node_modules/
+frontend/node_modules/
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Large Cache files (keep best_gatv2.pt)
+*.cache
+graph_cache.pt
