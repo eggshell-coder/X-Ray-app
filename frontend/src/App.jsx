@@ -4,7 +4,7 @@ import UploadZone from './components/UploadZone';
 import MedicalImageViewer from './components/MedicalImageViewer';
 import PredictionPanel from './components/PredictionPanel';
 import { Sparkles, Trash2 } from 'lucide-react';
-import { getEndpoint } from './apiConfig';
+import { getEndpoint, getTunnelHeaders } from './apiConfig';
 
 export default function App() {
   const [selectedFile, setSelectedFile] = useState(null);
@@ -38,6 +38,7 @@ export default function App() {
     try {
       const res = await fetch(getEndpoint('/api/predict'), {
         method: 'POST',
+        headers: getTunnelHeaders(),
         body: formData,
       });
 

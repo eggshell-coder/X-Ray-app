@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Network, Server, Settings, Check, X } from 'lucide-react';
-import { getApiBase, setApiBase, getEndpoint } from '../apiConfig';
+import { getApiBase, setApiBase, getEndpoint, getTunnelHeaders } from '../apiConfig';
 
 export default function Header() {
   const [health, setHealth] = useState({ status: 'checking', device: '', classes: [] });
@@ -10,7 +10,9 @@ export default function Header() {
   const checkHealth = async () => {
     setHealth({ status: 'checking', device: '', classes: [] });
     try {
-      const res = await fetch(getEndpoint('/api/health'));
+      const res = await fetch(getEndpoint('/api/health'), {
+        headers: getTunnelHeaders(),
+      });
       const data = await res.json();
       if (data.status === 'ok') {
         setHealth({ status: 'ok', device: data.device, classes: data.classes });

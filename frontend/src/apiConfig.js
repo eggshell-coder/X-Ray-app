@@ -24,3 +24,10 @@ export function getEndpoint(path) {
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
   return base ? `${base}${cleanPath}` : cleanPath;
 }
+
+export function getTunnelHeaders() {
+  return {
+    'Bypass-Tunnel-Remainder': 'true',
+    'ngrok-skip-browser-warning': 'true',
+  };
+}
