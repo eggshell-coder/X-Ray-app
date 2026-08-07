@@ -1,0 +1,13 @@
+Copy your trained checkpoint file here and rename it exactly to:
+
+    best_gatv2.pt
+
+So the final path is:
+    backend/checkpoints/best_gatv2.pt
+
+Alternatively, set an environment variable to point anywhere else:
+    export CXR_GNN_CKPT=/absolute/path/to/best_gatv2.pt
+
+The server reads this checkpoint at startup. It expects the dict format
+saved by Trainer.save_checkpoint() in the training notebook:
+    {"model_state": ..., "cfg": ..., "class2idx": ..., "best_val_loss": ...}
