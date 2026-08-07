@@ -9,24 +9,30 @@ from typing import Tuple
 import numpy as np
 from skimage.color import rgb2gray
 from skimage.exposure import rescale_intensity
+from skimage.filters import laplace
 from skimage.io import imread
 from skimage.transform import resize as sk_resize
 
 
 def inspect_and_load_image(raw_bytes: bytes, size: int) -> Tuple[np.ndarray, dict]:
     """Loads image, converts to grayscale float32 [0,1], (size,size), and performs
-    Layer-1 pre-checks (RGB color channel variance, aspect ratio, and anatomical
-    tissue pixel distribution).
+    Layer 1 (Color/Tint Check), Layer 2 (Histogram/Gray-Level Check), and
+    Layer 3 (Edge-Density Check).
 
-    Chest X-rays are monochromatic (R ≈ G ≈ B) with smooth anatomical mid-tones
-    (lungs, ribs, heart). Diagrams, text documents, logos, and wallpapers have
-    extreme black/white ratios and minimal mid-tones.
+    Allows:
+      - Standard monochromatic chest X-rays.
+      - Cyan/Blue/Sepia-tinted chest X-rays (uniform film/monitor color cast).
+
+    Rejects:
+      - Multi-colored non-medical photos (cats, nature, clothes, UI screenshots).
+      - Flowchart diagrams, text screenshots, wallpapers.
+      - Synthetic vector drawings / sharp document text.
 
     Returns:
         (gray_img, check_dict)
     """
-    is_color = False
-    color_score = 0.0
+    is_multi_color = False
+    spatial_color_var = 0.0
     aspect_ratio = 1.0
 
     try:
@@ -43,19 +49,20 @@ def inspect_and_load_image(raw_bytes: bytes, size: int) -> Tuple[np.ndarray, dic
         aspect_ratio = float(w) / float(h) if h > 0 else 1.0
         channels = raw_img[..., :3] if raw_img.shape[2] >= 3 else raw_img
         if channels.shape[2] == 3:
-            # Normalize to 0..1 for color check
             c_norm = channels.astype(np.float32)
             if c_norm.max() > 1.0:
                 c_norm /= 255.0
 
-            # RGB channel pairwise difference variance
-            diff_rg = np.abs(c_norm[..., 0] - c_norm[..., 1])
-            diff_gb = np.abs(c_norm[..., 1] - c_norm[..., 2])
-            color_score = float(np.mean(diff_rg + diff_gb))
+            # Spatial Variance of RGB Color Ratios across pixels.
+            # Uniform film/monitor tints (blue X-ray) have spatial_color_var < 0.015.
+            # Multi-colored photos (cats, nature, UI screenshots) have spatial_color_var > 0.035.
+            r, g, b = c_norm[..., 0], c_norm[..., 1], c_norm[..., 2]
+            total = r + g + b + 1e-6
+            r_ratio, g_ratio, b_ratio = r / total, g / total, b / total
+            spatial_color_var = float(np.var(r_ratio) + np.var(g_ratio) + np.var(b_ratio))
 
-            # Threshold: X-ray scans have color_score < 0.025. Colored photos/screenshots exceed 0.03.
-            if color_score > 0.030:
-                is_color = True
+            if spatial_color_var > 0.035:
+                is_multi_color = True
 
         img = rgb2gray(channels)
     else:
@@ -70,32 +77,47 @@ def inspect_and_load_image(raw_bytes: bytes, size: int) -> Tuple[np.ndarray, dic
     img = sk_resize(img, (size, size), anti_aliasing=True, preserve_range=True)
     img = rescale_intensity(img, out_range=(0.0, 1.0)).astype(np.float32)
 
-    # ── Anatomical Tissue Histogram Pre-check ─────────────────────────────
-    p_black = float(np.mean(img < 0.03))        # pure black pixels (diagram backgrounds, wallpapers)
-    p_white = float(np.mean(img > 0.97))        # pure white pixels (document text paper, banners)
-    p_midtone = float(np.mean((img >= 0.12) & (img <= 0.88)))  # soft tissue & lungs
+    # ── Layer 2: Anatomical Tissue Histogram / Gray-Level Check ───────────
+    p_black = float(np.mean(img < 0.03))        # pure black pixels (flowcharts, dark wallpapers)
+    p_white = float(np.mean(img > 0.97))        # pure white pixels (document paper, text)
+    p_midtone = float(np.mean((img >= 0.10) & (img <= 0.90)))  # soft tissue, lungs, heart
 
     is_diagram_or_text = False
-    if p_midtone < 0.22 or p_black > 0.68 or p_white > 0.42:
+    if p_midtone < 0.16 or p_black > 0.72 or p_white > 0.48:
         is_diagram_or_text = True
 
-    passed = not is_color and (0.4 <= aspect_ratio <= 2.5) and not is_diagram_or_text
+    # ── Layer 3: Edge Density Check (Detects text documents / vector lines)
+    edges = laplace(img)
+    edge_density = float(np.mean(np.abs(edges) > 0.15))
+    is_dense_text_or_vector = False
+    if edge_density > 0.35:
+        is_dense_text_or_vector = True
+
+    passed = (
+        not is_multi_color
+        and (0.35 <= aspect_ratio <= 2.8)
+        and not is_diagram_or_text
+        and not is_dense_text_or_vector
+    )
 
     reason = None
-    if is_color:
-        reason = "not_grayscale"
-    elif not (0.4 <= aspect_ratio <= 2.5):
+    if is_multi_color:
+        reason = "multi_colored_photo"
+    elif not (0.35 <= aspect_ratio <= 2.8):
         reason = "invalid_aspect_ratio"
     elif is_diagram_or_text:
-        reason = "non_xray_diagram_or_text"
+        reason = "non_xray_histogram"
+    elif is_dense_text_or_vector:
+        reason = "synthetic_edge_pattern"
 
     check_dict = {
-        "is_color": is_color,
-        "color_score": color_score,
+        "is_multi_color": is_multi_color,
+        "spatial_color_var": spatial_color_var,
         "aspect_ratio": aspect_ratio,
         "p_black": p_black,
         "p_white": p_white,
         "p_midtone": p_midtone,
+        "edge_density": edge_density,
         "passed": passed,
         "reason": reason,
     }

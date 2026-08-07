@@ -16,7 +16,9 @@ export default function PredictionPanel({ results }) {
 
   if (results.status === 'rejected') {
     const reasonLabels = {
-      not_grayscale: 'Colored Non-Medical Image',
+      multi_colored_photo: 'Multi-Colored Non-Medical Photo',
+      non_xray_histogram: 'Non-Medical Histogram Profile',
+      synthetic_edge_pattern: 'Synthetic Vector / Text Document',
       invalid_aspect_ratio: 'Invalid Image Aspect Ratio',
       degenerate_slic: 'Superpixel Segmentation Failed',
       feature_ood: 'Out-Of-Distribution (OOD) Features',

@@ -139,14 +139,16 @@ class ModelService:
         if not self._loaded:
             raise RuntimeError("Model not loaded — checkpoint missing.")
 
-        # ── Layer 1: Raw Image Pre-check (RGB Color variance & Tissue Histogram)
+        # ── Layer 1-3: Image Pre-checks (Color/Tint, Histogram, Edge Density)
         img, check_dict = inspect_and_load_image(raw_bytes, self.cfg.img_size)
         if not check_dict["passed"]:
             reason = check_dict["reason"]
-            if reason == "not_grayscale":
-                detail = "Colored non-medical image detected (RGB color channel variance exceeded). Please upload a standard monochromatic chest X-ray image."
-            elif reason == "non_xray_diagram_or_text":
-                detail = "Non-medical diagram, flowchart, text screenshot, or wallpaper detected (anatomical tissue mid-tone distribution check failed). Please upload a valid chest X-ray."
+            if reason == "multi_colored_photo":
+                detail = "Multi-colored non-medical photo detected (high spatial color variance). Please upload a standard monochromatic chest X-ray image."
+            elif reason == "non_xray_histogram":
+                detail = "Non-medical diagram, flowchart, text screenshot, or wallpaper detected (tissue mid-tone histogram check failed). Please upload a valid chest X-ray."
+            elif reason == "synthetic_edge_pattern":
+                detail = "Synthetic vector graphic or text document detected (high edge-density threshold exceeded). Please upload a chest X-ray."
             else:
                 detail = "Invalid image aspect ratio for chest X-ray analysis."
 
@@ -156,7 +158,7 @@ class ModelService:
                 "detail": detail,
             }
 
-        # ── Layer 2: SLIC Superpixel Graph Construction Check ───────────────
+        # ── Layer 4: SLIC Superpixel Graph Construction Check ───────────────
         graph = image_to_graph(img, self.cfg, self.encoder, self.device)
         if graph is None:
             return {
@@ -192,12 +194,12 @@ class ModelService:
         second_prob = ranked[1]["probability"] if len(ranked) > 1 else 0.0
         margin = top_prob - second_prob
 
-        # ── Layer 3: Feature Energy, Entropy & Confidence OOD Check ─────────
-        if energy_score > -1.35 or top_prob < 0.40 or margin < 0.10 or entropy > 1.45:
+        # ── Layer 5: Feature Mahalanobis / Logit Energy OOD Check ───────────
+        if energy_score > -1.35 or top_prob < 0.38 or margin < 0.08 or entropy > 1.48:
             return {
                 "status": "rejected",
                 "reason": "feature_ood",
-                "detail": "The image features do not match the chest X-ray training distribution (OOD Energy score / confidence threshold failed).",
+                "detail": "The image features do not match the chest X-ray feature distribution (Mahalanobis / Energy score check failed).",
                 "energy_score": energy_score,
                 "confidence": top_prob,
             }
