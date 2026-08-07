@@ -16,7 +16,7 @@ from cxr_gnn.config import Config, IDX2CLASS as DEFAULT_IDX2CLASS
 from cxr_gnn.utils import get_device, get_logger
 from cxr_gnn.models.encoder import build_encoder
 from cxr_gnn.models.gatv2 import GATv2Classifier
-from cxr_gnn.data.dataset import load_gray_bytes
+from cxr_gnn.data.dataset import load_gray_bytes, inspect_and_load_image
 from cxr_gnn.data.graph import image_to_graph
 
 logger = get_logger(__name__)
