@@ -139,16 +139,17 @@ class ModelService:
         if not self._loaded:
             raise RuntimeError("Model not loaded — checkpoint missing.")
 
-        # ── Layer 1: Raw Image Pre-check (RGB Color variance & Aspect Ratio) ─
+        # ── Layer 1: Raw Image Pre-check (RGB Color variance & Tissue Histogram)
         img, check_dict = inspect_and_load_image(raw_bytes, self.cfg.img_size)
         if not check_dict["passed"]:
             reason = check_dict["reason"]
-            detail = (
-                "Colored non-medical image detected (RGB color channel variance exceeded). "
-                "Please upload a standard monochromatic chest X-ray image."
-                if reason == "not_grayscale"
-                else "Invalid image aspect ratio for chest X-ray analysis."
-            )
+            if reason == "not_grayscale":
+                detail = "Colored non-medical image detected (RGB color channel variance exceeded). Please upload a standard monochromatic chest X-ray image."
+            elif reason == "non_xray_diagram_or_text":
+                detail = "Non-medical diagram, flowchart, text screenshot, or wallpaper detected (anatomical tissue mid-tone distribution check failed). Please upload a valid chest X-ray."
+            else:
+                detail = "Invalid image aspect ratio for chest X-ray analysis."
+
             return {
                 "status": "rejected",
                 "reason": reason,
@@ -172,10 +173,12 @@ class ModelService:
         else:
             logits, attn_edge_index, attn_weights = out, None, None
 
-        # Energy-based OOD Score Computation: E(x) = -T * logsumexp(logits / T)
+        # Energy-based OOD Score & Entropy Computation
         energy_score = float(-1.0 * torch.logsumexp(logits, dim=1).item())
+        probs_tensor = F.softmax(logits, dim=1)[0]
+        entropy = float(-1.0 * torch.sum(probs_tensor * torch.log(probs_tensor + 1e-12)).item())
 
-        probs = F.softmax(logits, dim=1)[0].cpu().tolist()
+        probs = probs_tensor.cpu().tolist()
         ranked = sorted(
             (
                 {"label": self.idx2class[i], "probability": float(p)}
@@ -189,14 +192,12 @@ class ModelService:
         second_prob = ranked[1]["probability"] if len(ranked) > 1 else 0.0
         margin = top_prob - second_prob
 
-        # ── Layer 3: Feature Energy & Confidence OOD Check ─────────────────
-        # In-distribution X-rays give energy_score < -2.0 and strong margin.
-        # Out-of-distribution grayscale images (cats, art, noise) yield weak energy or flat probabilities.
-        if energy_score > -1.35 or top_prob < 0.38 or margin < 0.08:
+        # ── Layer 3: Feature Energy, Entropy & Confidence OOD Check ─────────
+        if energy_score > -1.35 or top_prob < 0.40 or margin < 0.10 or entropy > 1.45:
             return {
                 "status": "rejected",
                 "reason": "feature_ood",
-                "detail": "The image features do not match the chest X-ray training distribution (OOD Energy score / confidence margin threshold failed).",
+                "detail": "The image features do not match the chest X-ray training distribution (OOD Energy score / confidence threshold failed).",
                 "energy_score": energy_score,
                 "confidence": top_prob,
             }

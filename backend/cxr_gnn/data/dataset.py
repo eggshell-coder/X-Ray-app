@@ -15,10 +15,12 @@ from skimage.transform import resize as sk_resize
 
 def inspect_and_load_image(raw_bytes: bytes, size: int) -> Tuple[np.ndarray, dict]:
     """Loads image, converts to grayscale float32 [0,1], (size,size), and performs
-    Layer-1 pre-checks (RGB color channel variance, aspect ratio).
+    Layer-1 pre-checks (RGB color channel variance, aspect ratio, and anatomical
+    tissue pixel distribution).
 
-    Chest X-rays are monochromatic (R ≈ G ≈ B). Colored images (cats, landscapes,
-    screenshots, memes) have significant channel variance.
+    Chest X-rays are monochromatic (R ≈ G ≈ B) with smooth anatomical mid-tones
+    (lungs, ribs, heart). Diagrams, text documents, logos, and wallpapers have
+    extreme black/white ratios and minimal mid-tones.
 
     Returns:
         (gray_img, check_dict)
@@ -51,8 +53,8 @@ def inspect_and_load_image(raw_bytes: bytes, size: int) -> Tuple[np.ndarray, dic
             diff_gb = np.abs(c_norm[..., 1] - c_norm[..., 2])
             color_score = float(np.mean(diff_rg + diff_gb))
 
-            # Threshold: X-ray scans have color_score < 0.025. Colored photos/screenshots exceed 0.04.
-            if color_score > 0.035:
+            # Threshold: X-ray scans have color_score < 0.025. Colored photos/screenshots exceed 0.03.
+            if color_score > 0.030:
                 is_color = True
 
         img = rgb2gray(channels)
@@ -68,12 +70,34 @@ def inspect_and_load_image(raw_bytes: bytes, size: int) -> Tuple[np.ndarray, dic
     img = sk_resize(img, (size, size), anti_aliasing=True, preserve_range=True)
     img = rescale_intensity(img, out_range=(0.0, 1.0)).astype(np.float32)
 
+    # ── Anatomical Tissue Histogram Pre-check ─────────────────────────────
+    p_black = float(np.mean(img < 0.03))        # pure black pixels (diagram backgrounds, wallpapers)
+    p_white = float(np.mean(img > 0.97))        # pure white pixels (document text paper, banners)
+    p_midtone = float(np.mean((img >= 0.12) & (img <= 0.88)))  # soft tissue & lungs
+
+    is_diagram_or_text = False
+    if p_midtone < 0.22 or p_black > 0.68 or p_white > 0.42:
+        is_diagram_or_text = True
+
+    passed = not is_color and (0.4 <= aspect_ratio <= 2.5) and not is_diagram_or_text
+
+    reason = None
+    if is_color:
+        reason = "not_grayscale"
+    elif not (0.4 <= aspect_ratio <= 2.5):
+        reason = "invalid_aspect_ratio"
+    elif is_diagram_or_text:
+        reason = "non_xray_diagram_or_text"
+
     check_dict = {
         "is_color": is_color,
         "color_score": color_score,
         "aspect_ratio": aspect_ratio,
-        "passed": not is_color and (0.4 <= aspect_ratio <= 2.5),
-        "reason": "not_grayscale" if is_color else ("invalid_aspect_ratio" if not (0.4 <= aspect_ratio <= 2.5) else None),
+        "p_black": p_black,
+        "p_white": p_white,
+        "p_midtone": p_midtone,
+        "passed": passed,
+        "reason": reason,
     }
 
     return img, check_dict
