@@ -54,6 +54,8 @@ def health() -> dict:
         "status": "ok" if model_service.is_ready else "model_not_loaded",
         "device": str(model_service.device),
         "classes": list(model_service.idx2class.values()) if model_service.is_ready else [],
+        "input_validator_ready": model_service.input_validator.is_ready,
+        "require_dicom": model_service.input_validator.require_dicom,
     }
 
 

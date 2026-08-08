@@ -16,7 +16,7 @@ from cxr_gnn.config import Config, IDX2CLASS as DEFAULT_IDX2CLASS
 from cxr_gnn.utils import get_device, get_logger
 from cxr_gnn.models.encoder import build_encoder
 from cxr_gnn.models.gatv2 import GATv2Classifier
-from cxr_gnn.data.dataset import load_gray_bytes, inspect_and_load_image
+from cxr_gnn.input_validation import ChestXrayInputValidator
 from cxr_gnn.data.graph import image_to_graph
 
 logger = get_logger(__name__)
@@ -91,6 +91,7 @@ class ModelService:
         self.idx2class: dict[int, str] = {}
         self.encoder = None
         self.model: Optional[GATv2Classifier] = None
+        self.input_validator = ChestXrayInputValidator(self.device)
         self._loaded = False
 
     def load(self) -> None:
@@ -124,6 +125,11 @@ class ModelService:
         self.model.to(self.device)
         self.model.eval()
 
+        # This gate is independent from the five-class disease classifier.
+        # It must load successfully; otherwise the predict endpoint fails
+        # closed and never emits a disease label for an unverified input.
+        self.input_validator.load()
+
         self._loaded = True
         logger.info(
             "Loaded GATv2 checkpoint from %s | classes=%s | device=%s",
@@ -139,24 +145,17 @@ class ModelService:
         if not self._loaded:
             raise RuntimeError("Model not loaded — checkpoint missing.")
 
-        # ── Layer 1-3: Image Pre-checks (Color/Tint, Histogram, Edge Density)
-        img, check_dict = inspect_and_load_image(raw_bytes, self.cfg.img_size)
-        if not check_dict["passed"]:
-            reason = check_dict["reason"]
-            if reason == "multi_colored_photo":
-                detail = "Multi-colored non-medical photo detected (high spatial color variance). Please upload a standard monochromatic chest X-ray image."
-            elif reason == "non_xray_histogram":
-                detail = "Non-medical diagram, flowchart, text screenshot, or wallpaper detected (tissue mid-tone histogram check failed). Please upload a valid chest X-ray."
-            elif reason == "synthetic_edge_pattern":
-                detail = "Synthetic vector graphic or text document detected (high edge-density threshold exceeded). Please upload a chest X-ray."
-            else:
-                detail = "Invalid image aspect ratio for chest X-ray analysis."
-
+        # Validate first. A five-class softmax would otherwise assign a
+        # plausible-looking disease probability to every arbitrary image.
+        validation = self.input_validator.validate(raw_bytes, self.cfg.img_size)
+        if not validation.accepted:
             return {
                 "status": "rejected",
-                "reason": reason,
-                "detail": detail,
+                "reason": validation.reason,
+                "detail": validation.detail,
             }
+
+        img = validation.image
 
         # ── Layer 4: SLIC Superpixel Graph Construction Check ───────────────
         graph = image_to_graph(img, self.cfg, self.encoder, self.device)

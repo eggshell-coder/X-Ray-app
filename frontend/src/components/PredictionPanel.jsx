@@ -22,6 +22,10 @@ export default function PredictionPanel({ results }) {
       invalid_aspect_ratio: 'Invalid Image Aspect Ratio',
       degenerate_slic: 'Superpixel Segmentation Failed',
       feature_ood: 'Out-Of-Distribution (OOD) Features',
+      recognised_non_medical_image: 'Recognized Non-Medical Image',
+      untrusted_raster_source: 'Unverified Raster Image',
+      unverified_dicom_metadata: 'Unverified DICOM Metadata',
+      validator_unavailable: 'Input Validator Unavailable',
     };
 
     return (
@@ -46,7 +50,7 @@ export default function PredictionPanel({ results }) {
         </div>
 
         <div className="disclaimer" style={{ marginTop: 24 }}>
-          To prevent overconfident false classifications (e.g. cat photos or screenshots), our 3-layer OOD filter rejects inputs outside the chest X-ray distribution.
+          No disease probabilities were generated. The independent chest-X-ray gate rejected this upload before the disease model could run.
         </div>
       </div>
     );
@@ -63,7 +67,6 @@ export default function PredictionPanel({ results }) {
         <div className="conf">{confPct}%</div>
       </div>
 
-      {/* Confidence Gauge */}
       <ConfidenceGauge value={results.confidence * 100} />
 
       <div className="badge-row">
