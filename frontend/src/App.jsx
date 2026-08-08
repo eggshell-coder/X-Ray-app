@@ -49,7 +49,12 @@ export default function App() {
 
       setResults(data);
     } catch (err) {
-      setError(err.message || 'An error occurred during analysis');
+      const isFetchError = err instanceof TypeError && /fetch/i.test(err.message || '');
+      setError(
+        isFetchError
+          ? 'Cannot connect to the backend. Please check the deployed API URL.'
+          : (err.message || 'An error occurred during analysis')
+      );
     } finally {
       setIsAnalyzing(false);
     }

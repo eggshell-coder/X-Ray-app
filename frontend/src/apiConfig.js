@@ -1,7 +1,7 @@
 const STORAGE_KEY = 'CXR_GNN_API_BASE';
 
 export function getApiBase() {
-  const custom = localStorage.getItem(STORAGE_KEY);
+  const custom = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null;
   if (custom && custom.trim() !== '') {
     return custom.trim().replace(/\/+$/, '');
   }
@@ -26,6 +26,9 @@ export function getEndpoint(path) {
 }
 
 export function getTunnelHeaders() {
+  // Tunnel-only headers create an unnecessary CORS preflight on Railway/Render.
+  const base = getApiBase().toLowerCase();
+  if (!base.includes('ngrok') && !base.includes('loca.lt')) return {};
   return {
     'Bypass-Tunnel-Remainder': 'true',
     'ngrok-skip-browser-warning': 'true',

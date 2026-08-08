@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShieldCheck, AlertTriangle, ShieldAlert, ImageOff } from 'lucide-react';
+import { ShieldCheck, AlertTriangle, ShieldAlert } from 'lucide-react';
 import ConfidenceGauge from './ConfidenceGauge';
 
 export default function PredictionPanel({ results }) {
@@ -15,42 +15,22 @@ export default function PredictionPanel({ results }) {
   }
 
   if (results.status === 'rejected') {
-    const reasonLabels = {
-      multi_colored_photo: 'Multi-Colored Non-Medical Photo',
-      non_xray_histogram: 'Non-Medical Histogram Profile',
-      synthetic_edge_pattern: 'Synthetic Vector / Text Document',
-      invalid_aspect_ratio: 'Invalid Image Aspect Ratio',
-      degenerate_slic: 'Superpixel Segmentation Failed',
-      feature_ood: 'Out-Of-Distribution (OOD) Features',
-      recognised_non_medical_image: 'Recognized Non-Medical Image',
-      untrusted_raster_source: 'Unverified Raster Image',
-      unverified_dicom_metadata: 'Unverified DICOM Metadata',
-      validator_unavailable: 'Input Validator Unavailable',
-    };
-
     return (
       <div className="prediction-results ood-rejected-card">
         <div className="ood-header">
           <ShieldAlert size={32} color="var(--red)" />
           <div>
-            <div className="ood-title">Prediction Withheld</div>
-            <div className="ood-subtitle">Non-Chest X-Ray / Out-Of-Distribution Detected</div>
+            <div className="ood-title">Non-medical image</div>
+            <div className="ood-subtitle">Please upload a chest X-ray image.</div>
           </div>
         </div>
 
-        <div className="badge-row" style={{ marginTop: 16 }}>
-          <span className="badge status-warn">
-            <ImageOff size={12} style={{ display: 'inline', marginRight: 4 }} />
-            Reason: {reasonLabels[results.reason] || results.reason}
-          </span>
-        </div>
-
         <div className="ood-detail-box">
-          {results.detail}
+          This is a non-medical image, not a chest X-ray.
         </div>
 
         <div className="disclaimer" style={{ marginTop: 24 }}>
-          No disease probabilities were generated. The independent chest-X-ray gate rejected this upload before the disease model could run.
+          No disease prediction was generated.
         </div>
       </div>
     );

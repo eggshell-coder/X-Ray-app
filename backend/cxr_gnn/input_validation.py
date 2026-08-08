@@ -176,9 +176,7 @@ class ChestXrayInputValidator:
                 accepted=False,
                 reason="recognised_non_medical_image",
                 detail=(
-                    "Prediction withheld: this upload appears to be a non-medical "
-                    f"image ({label}, {confidence:.0%} object-match confidence), "
-                    "not a chest X-ray."
+                    "This is a non-medical image, not a chest X-ray."
                 ),
                 diagnostics=checks,
             )
