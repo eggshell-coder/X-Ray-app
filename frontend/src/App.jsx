@@ -6,6 +6,52 @@ import PredictionPanel from './components/PredictionPanel';
 import { Sparkles, Trash2 } from 'lucide-react';
 import { getEndpoint, getTunnelHeaders } from './apiConfig';
 
+const MAX_CLIENT_UPLOAD_BYTES = 1.8 * 1024 * 1024;
+const MAX_CLIENT_IMAGE_DIMENSION = 2400;
+
+function isDicomFile(file) {
+  return file.type === 'application/dicom' || /\.dcm$/i.test(file.name || '');
+}
+
+async function prepareUploadFile(file) {
+  // DICOM contains medical metadata and must not be converted through a
+  // browser canvas. The backend validates its size and content directly.
+  if (isDicomFile(file) || file.size <= MAX_CLIENT_UPLOAD_BYTES) {
+    return file;
+  }
+
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const image = new Image();
+    image.decoding = 'async';
+    image.src = objectUrl;
+    await image.decode();
+
+    const scale = Math.min(1, MAX_CLIENT_IMAGE_DIMENSION / Math.max(image.naturalWidth, image.naturalHeight));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const context = canvas.getContext('2d', { alpha: false });
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+    let quality = 0.86;
+    let compressed = null;
+    do {
+      compressed = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
+      quality -= 0.08;
+    } while (compressed && compressed.size > MAX_CLIENT_UPLOAD_BYTES && quality >= 0.50);
+
+    if (!compressed || compressed.size >= file.size) {
+      return file;
+    }
+
+    const filename = (file.name || 'xray').replace(/\.[^.]+$/, '') + '.jpg';
+    return new File([compressed], filename, { type: 'image/jpeg', lastModified: Date.now() });
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
 export default function App() {
   const [selectedFile, setSelectedFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
@@ -32,8 +78,9 @@ export default function App() {
     setIsAnalyzing(true);
     setError(null);
 
-    const formData = new FormData();
-    formData.append('file', selectedFile);
+      const uploadFile = await prepareUploadFile(selectedFile);
+      const formData = new FormData();
+      formData.append('file', uploadFile, uploadFile.name);
 
     try {
       const res = await fetch(getEndpoint('/api/predict'), {
