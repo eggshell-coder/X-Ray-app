@@ -153,6 +153,15 @@ class ChestXrayInputValidator:
                 diagnostics=checks,
             )
 
+        # ImageNet is useful as a veto for obvious objects, but it is not a
+        # chest-X-ray classifier. Give a structurally plausible radiograph
+        # priority so a grayscale X-ray is not mislabeled as an ImageNet item
+        # such as “iPod”, “fountain”, or “spotlight”.
+        radiograph_likeness = self._radiograph_likeness(image, checks)
+        checks = {**checks, "radiograph_likeness": radiograph_likeness}
+        if radiograph_likeness:
+            return ValidationResult(image=image, accepted=True, diagnostics=checks)
+
         label, confidence = self._natural_image_prediction(image)
         checks = {
             **checks,
@@ -175,6 +184,46 @@ class ChestXrayInputValidator:
             )
 
         return ValidationResult(image=image, accepted=True, diagnostics=checks)
+
+    @staticmethod
+    def _radiograph_likeness(image: np.ndarray, checks: dict[str, Any]) -> bool:
+        """Conservative frontal-radiograph structure check.
+
+        This is intentionally only an allow-list signal. It requires a nearly
+        monochrome image, a portrait-like radiograph aspect ratio, substantial
+        left/right symmetry, and a brighter central mediastinal band than the
+        lateral fields. Ordinary colour photos and UI screenshots do not meet
+        all four conditions, while the project's frontal chest X-rays do.
+        """
+        if checks.get("source_type") == "dicom":
+            metadata = checks.get("dicom_metadata", {})
+            if metadata.get("modality") in {"CR", "DX"}:
+                body = f"{metadata.get('body_part', '')} {metadata.get('study_description', '')}"
+                if "CHEST" in body:
+                    return True
+
+        if checks.get("colored_pixel_fraction", 1.0) > 0.05:
+            return False
+        if not (0.55 <= float(checks.get("aspect_ratio", 0.0)) <= 1.35):
+            return False
+
+        height, width = image.shape[:2]
+        if height < 32 or width < 32:
+            return False
+        left = image[:, : width // 2]
+        right = np.fliplr(image[:, width - width // 2 :])
+        correlation = float(np.corrcoef(left.ravel(), right.ravel())[0, 1])
+        if not np.isfinite(correlation) or correlation < 0.66:
+            return False
+
+        center_start = int(width * 0.38)
+        center_end = int(width * 0.62)
+        side_width = max(1, int(width * 0.18))
+        center_mean = float(image[:, center_start:center_end].mean())
+        side_mean = float(
+            np.concatenate((image[:, :side_width], image[:, -side_width:]), axis=1).mean()
+        )
+        return center_mean - side_mean >= 0.13
 
     @torch.no_grad()
     def _natural_image_prediction(self, image: np.ndarray) -> tuple[str, float]:
