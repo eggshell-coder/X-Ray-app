@@ -15,18 +15,28 @@ export default function PredictionPanel({ results }) {
   }
 
   if (results.status === 'rejected') {
+    const needsReview = ['feature_ood', 'degenerate_slic'].includes(results.reason);
+
     return (
       <div className="prediction-results ood-rejected-card">
         <div className="ood-header">
           <ShieldAlert size={32} color="var(--red)" />
           <div>
-            <div className="ood-title">Non-medical image</div>
-            <div className="ood-subtitle">Please upload a chest X-ray image.</div>
+            <div className="ood-title">
+              {needsReview ? 'Review needed' : 'Non-medical image'}
+            </div>
+            <div className="ood-subtitle">
+              {needsReview
+                ? 'The X-ray could not be classified confidently.'
+                : 'Please upload a chest X-ray image.'}
+            </div>
           </div>
         </div>
 
         <div className="ood-detail-box">
-          This is a non-medical image, not a chest X-ray.
+          {needsReview
+            ? 'This image may be a chest X-ray, but the confidence is below the safe prediction threshold. Please review it or upload a clearer X-ray.'
+            : 'This is a non-medical image, not a chest X-ray.'}
         </div>
 
         <div className="disclaimer" style={{ marginTop: 24 }}>

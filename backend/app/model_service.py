@@ -194,7 +194,9 @@ class ModelService:
         margin = top_prob - second_prob
 
         # ── Layer 5: Feature Mahalanobis / Logit Energy OOD Check ───────────
-        if energy_score > -1.35 or top_prob < 0.38 or margin < 0.08 or entropy > 1.48:
+        # Do not present a disease label when the model is below the user's
+        # 50% confidence floor; the frontend renders this as "Review needed".
+        if energy_score > -1.35 or top_prob < 0.50 or margin < 0.08 or entropy > 1.48:
             return {
                 "status": "rejected",
                 "reason": "feature_ood",
