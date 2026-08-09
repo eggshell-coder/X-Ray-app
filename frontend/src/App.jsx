@@ -139,7 +139,7 @@ export default function App() {
               disabled={!selectedFile || isAnalyzing}
             >
               <Sparkles size={16} />
-              {isAnalyzing ? 'Segmenting & Analyzing…' : 'Analyze Image'}
+              {isAnalyzing ? 'Analyzing…' : 'Analyze Image'}
             </button>
 
             {selectedFile && (

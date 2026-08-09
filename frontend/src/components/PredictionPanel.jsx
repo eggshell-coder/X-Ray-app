@@ -8,7 +8,7 @@ export default function PredictionPanel({ results }) {
       <div className="empty-results">
         <div>Awaiting an image.</div>
         <div style={{ fontSize: '11px', color: 'var(--muted)' }}>
-          Results, GNN explainability heatmaps<br />and per-class confidence will appear here.
+          Results and per-class confidence will appear here.
         </div>
       </div>
     );
@@ -60,8 +60,6 @@ export default function PredictionPanel({ results }) {
       <ConfidenceGauge value={results.confidence * 100} />
 
       <div className="badge-row">
-        <span className="badge">{results.n_superpixels} regions analyzed</span>
-        <span className="badge">GATv2 Architecture</span>
         <span className={`badge ${isHighConf ? 'status-ok' : 'status-warn'}`}>
           {isHighConf ? (
             <ShieldCheck size={12} style={{ display: 'inline', marginRight: 4 }} />

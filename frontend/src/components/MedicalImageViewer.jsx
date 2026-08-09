@@ -1,26 +1,17 @@
 import React, { useState } from 'react';
-import { Eye, Layers, Flame, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
+import { Eye, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
 
 export default function MedicalImageViewer({ originalUrl, visualizations }) {
   const [activeView, setActiveView] = useState('original');
-  const [opacity, setOpacity] = useState(0.85);
   const [zoom, setZoom] = useState(1);
 
-  const hasVisualizations = visualizations && visualizations.superpixels;
-
   const getDisplayedImage = () => {
-    if (activeView === 'superpixels' && visualizations?.superpixels) {
-      return visualizations.superpixels;
-    }
-    if (activeView === 'attention' && visualizations?.attention_heatmap) {
-      return visualizations.attention_heatmap;
-    }
     return originalUrl;
   };
 
   return (
     <div className="medical-viewer">
-      {hasVisualizations && (
+      {(
         <div className="viewport-toolbar">
           <div className="view-tabs">
             <button
@@ -30,36 +21,7 @@ export default function MedicalImageViewer({ originalUrl, visualizations }) {
               <Eye size={12} style={{ display: 'inline', marginRight: 4 }} />
               Original
             </button>
-            <button
-              className={`view-btn ${activeView === 'superpixels' ? 'active' : ''}`}
-              onClick={() => setActiveView('superpixels')}
-            >
-              <Layers size={12} style={{ display: 'inline', marginRight: 4 }} />
-              Superpixel Graph
-            </button>
-            <button
-              className={`view-btn ${activeView === 'attention' ? 'active' : ''}`}
-              onClick={() => setActiveView('attention')}
-            >
-              <Flame size={12} style={{ display: 'inline', marginRight: 4 }} />
-              GATv2 Attention
-            </button>
           </div>
-
-          {activeView === 'attention' && (
-            <div className="opacity-slider-wrap">
-              <span>Heatmap Opacity:</span>
-              <input
-                type="range"
-                min="0.1"
-                max="1.0"
-                step="0.05"
-                value={opacity}
-                onChange={(e) => setOpacity(parseFloat(e.target.value))}
-              />
-              <span>{Math.round(opacity * 100)}%</span>
-            </div>
-          )}
 
           <div className="view-tabs">
             <button className="view-btn" onClick={() => setZoom((z) => Math.min(z + 0.25, 2.5))} title="Zoom In">
@@ -81,8 +43,7 @@ export default function MedicalImageViewer({ originalUrl, visualizations }) {
           alt="X-ray Viewport"
           style={{
             transform: `scale(${zoom})`,
-            opacity: activeView === 'attention' ? opacity : 1,
-            transition: 'transform 0.15s ease, opacity 0.15s ease',
+            transition: 'transform 0.15s ease',
           }}
         />
         <div className="frame-corner fc-tl" />
