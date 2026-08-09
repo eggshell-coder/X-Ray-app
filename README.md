@@ -1,102 +1,101 @@
-# CXR·GNN — Chest X-ray Disease Classifier (FastAPI + GATv2)
+# CXR-GNN
 
-Full app for your `cxr_gnn` project: a FastAPI backend that loads your trained
-`best_gatv2.pt` and runs the exact same image→superpixel-graph→GATv2 pipeline
-from your notebook, plus a single-page frontend to upload an X-ray and see
-the prediction.
+Chest X-ray classification with a FastAPI backend and React frontend. The
+application uses a frozen ResNet18 image encoder, a GATv2 graph classifier, an
+independent chest-X-ray reference gate, and uncertainty checks before showing a
+disease prediction.
 
+> **Research and education only.** This project is not a medical device and
+> must not be used as a substitute for a qualified radiologist.
+
+## Live demo
+
+[Open the deployed application](https://x-ray-app-ropd.onrender.com/)
+
+## Features
+
+- Chest-X-ray input gate based on an approved reference-image bank.
+- Fail-closed behavior for non-medical images and unsupported uploads.
+- Disease prediction with a 50% confidence floor; uncertain cases are marked
+  for review instead of displaying a disease label.
+- React/Vite interface with mobile-friendly upload compression.
+- FastAPI health and prediction endpoints.
+
+## Project layout
+
+```text
+backend/
+  app/                    FastAPI routes and model service
+  cxr_gnn/                preprocessing, graph creation, model and validation
+  checkpoints/            model checkpoint and reference bank
+  requirements.txt
+frontend/
+  src/                    React application
+  dist/                   production build served by the backend
+render.yaml               Render deployment configuration
 ```
-xray-app/
-├── backend/
-│   ├── app/
-│   │   ├── main.py            ← FastAPI app (routes)
-│   │   └── model_service.py   ← loads checkpoint, runs inference
-│   ├── cxr_gnn/                ← trimmed copy of your training package
-│   │   ├── config.py
-│   │   ├── utils.py
-│   │   ├── models/{encoder,gatv2}.py
-│   │   └── data/{dataset,graph}.py
-│   ├── checkpoints/            ← put best_gatv2.pt here
-│   └── requirements.txt
-└── frontend/
-    └── index.html               ← single-file UI, no build step
-```
 
-## 1. Install & run the backend
+## Local development
 
-```bash
+### Backend
+
+```powershell
 cd backend
-python3 -m venv venv
-source venv/bin/activate        # Windows: venv\Scripts\activate
-
+python -m venv venv
+.\venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-# torch-geometric needs matching wheels for your torch/CUDA version — if the
-# plain pip install fails, follow: https://pytorch-geometric.readthedocs.io/en/latest/install/installation.html
-
-cp /path/to/your/best_gatv2.pt checkpoints/best_gatv2.pt
-
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8080
 ```
 
-Open **http://localhost:8000** — FastAPI serves the frontend directly from
-`/`, so backend and UI run as one app. No separate frontend server needed.
+Check readiness at `http://localhost:8080/api/health`.
 
-Check the model loaded correctly:
-```bash
-curl http://localhost:8000/api/health
+### Frontend
+
+In a second terminal:
+
+```powershell
+cd frontend
+npm install
+npm run dev
 ```
 
-## 2. How prediction works
+Open `http://localhost:3000`. The Vite development proxy forwards `/api` to
+the backend on port `8080`.
 
-`POST /api/predict` (multipart file upload) →
+## API
 
-1. Image is decoded, converted to grayscale, resized to `cfg.img_size`,
-   intensity-rescaled — identical to `load_gray()` in your notebook.
-2. SLIC superpixel segmentation builds a region-adjacency graph.
-3. Each node gets a 140-d feature vector: 128-d frozen-ResNet18 deep
-   features (average-pooled per region) + 12-d hand-crafted texture/shape
-   features. Edges get a 2-d intensity/texture-difference feature.
-3. The graph is passed through your trained `GATv2Classifier`.
-4. Softmax probabilities for every class are returned, ranked.
+### `GET /api/health`
 
-```json
-{
-  "prediction": "TB",
-  "confidence": 0.842,
-  "probabilities": [
-    {"label": "TB", "probability": 0.842},
-    {"label": "ChronicLung", "probability": 0.091},
-    {"label": "Normal", "probability": 0.041},
-    {"label": "Cardiac", "probability": 0.018},
-    {"label": "Pleural", "probability": 0.008}
-  ],
-  "n_superpixels": 176
-}
-```
+Returns model and validator readiness.
 
-Class names are read straight from the checkpoint's `class2idx`, so this
-adapts automatically if you retrain with a different label set.
+### `POST /api/predict`
 
-## 3. Deploying
+Accepts a multipart form upload named `file`. A successful response contains
+the predicted class, confidence, and ranked class probabilities. Rejected
+uploads return `status: "rejected"` and do not expose disease probabilities.
 
-- **Docker**: wrap `backend/` in a `python:3.11-slim` image, `pip install -r
-  requirements.txt`, `COPY frontend /frontend`, run uvicorn. Mount or bake in
-  `checkpoints/best_gatv2.pt`.
-- **Hosting**: Render, Railway, Fly.io, or a GPU box on AWS/GCP all work fine
-  for FastAPI + PyTorch. CPU inference is fine for single-image requests;
-  GPU only matters if you expect heavy concurrent traffic.
-- Lock down CORS in `app/main.py` (`allow_origins`) once you have a real
-  frontend domain — it's wide open (`*`) for local development right now.
+## Deployment
 
-## 4. Notes / things you may want to change
+- **Backend:** Railway or another Python container host. Set the public
+  backend URL and expose the service port supplied by `$PORT`.
+- **Frontend:** Render static site. Set `VITE_API_URL` to the public backend
+  URL without a trailing `/api`, then rebuild after changes.
+- Keep `backend/checkpoints/best_gatv2.pt` and
+  `backend/checkpoints/xray_reference_bank.npz` available to the backend.
 
-- **Preprocessing must stay in sync.** If you ever change SLIC parameters,
-  feature extraction, or normalization in the notebook, mirror the change in
-  `backend/cxr_gnn/data/graph.py` and `dataset.py` — inference will silently
-  degrade otherwise, since it's re-implemented here rather than imported
-  from the notebook.
-- **`graph_cache.pt`** from your project folder is a training-time cache of
-  precomputed graphs — it is not needed for inference and isn't used here.
-- The frontend is one static HTML file (no npm/build step) so it's easy to
-  swap for a React app later if you want a fancier UI — the API contract
-  above stays the same either way.
+After pushing to `main`, wait for the Railway/Render deployment to finish and
+verify `/api/health` before testing an upload.
+
+## Configuration
+
+| Variable | Purpose | Default |
+| --- | --- | --- |
+| `CXR_GNN_CKPT` | Model checkpoint path | `backend/checkpoints/best_gatv2.pt` |
+| `CXR_REFERENCE_BANK` | Reference gate bank path | `backend/checkpoints/xray_reference_bank.npz` |
+| `CXR_REFERENCE_THRESHOLD` | Reference similarity threshold | `0.7287` |
+| `CXR_REFERENCE_PHASH_MAX_DISTANCE` | Approved-image pHash tolerance | `6` |
+| `CXR_REQUIRE_DICOM` | Require verified chest DICOM metadata | `false` |
+
+## License
+
+This project is released under the [MIT License](LICENSE).

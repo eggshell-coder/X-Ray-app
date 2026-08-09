@@ -21,3 +21,12 @@ Thumbs.db
 # Large Cache files (keep best_gatv2.pt)
 *.cache
 graph_cache.pt
+
+# Local batch-test output
+batch_test_report.csv
+backend/tools/batch_test.py
+
+# Local environment and deployment secrets
+.env
+.env.*
+!.env.example

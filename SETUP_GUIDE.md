@@ -1,60 +1,45 @@
-# 🚀 Local Model Backend Setup Guide (Run on Any Laptop)
+# Local setup guide
 
-Follow these simple step-by-step instructions to set up and run the CXR-GNN AI Model Backend on **any laptop or computer** (Windows, Mac, or Linux).
+## Requirements
 
----
+- Python 3.10 or 3.11
+- Node.js 18 or newer
+- Git
 
-## 📋 Prerequisites
-- **Python 3.11** (or 3.10) installed.
-- **Git** and **Node.js** (optional, for localtunnel).
+## Backend
 
----
-
-## 💻 Step-by-Step Setup
-
-### Step 1: Clone the Repository
-Open Terminal / PowerShell on the laptop and run:
-```bash
+```powershell
 git clone https://github.com/eggshell-coder/X-Ray-app.git
-cd X-Ray-app/backend
-```
-
-### Step 2: Create a Virtual Environment
-```bash
+cd X-Ray-app\backend
 python -m venv venv
-```
-
-### Step 3: Activate the Virtual Environment
-- **Windows (PowerShell)**:
-  ```powershell
-  .\venv\Scripts\Activate.ps1
-  ```
-- **Windows (Command Prompt / CMD)**:
-  ```cmd
-  venv\Scripts\activate.bat
-  ```
-- **Mac / Linux**:
-  ```bash
-  source venv/bin/activate
-  ```
-
-### Step 4: Install Dependencies
-```bash
+.\venv\Scripts\Activate.ps1
 pip install -r requirements.txt
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8080
 ```
 
-### Step 5: Start the Model Backend Server
-```bash
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+Verify the service:
+
+```text
+http://localhost:8080/api/health
 ```
 
----
+## Frontend
 
-## 🌐 Share Backend to Render Website (Tunneling)
+Open a second terminal:
 
-Open a **second terminal window** on the laptop and run:
-```bash
-npx localtunnel --port 8000
+```powershell
+cd X-Ray-app\frontend
+npm install
+npm run dev
 ```
 
-Copy the generated URL (e.g. `https://xxxx.loca.lt`) and paste it into the **⚙️ Settings Modal** on your Render Website!
+Open `http://localhost:3000`.
+
+## Production deployment
+
+The repository includes `render.yaml` for deployment configuration. Configure
+the Render frontend variable `VITE_API_URL` with the Railway backend's public
+URL, rebuild the frontend, and then verify the backend health endpoint.
+
+Tunneling is only needed when a phone must access a backend running on your
+local computer. It is not needed when using the deployed Railway URL.
