@@ -9,7 +9,9 @@ disease model is allowed to run.
 from __future__ import annotations
 
 import os
+import io
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -17,6 +19,7 @@ import torch
 from PIL import Image
 
 from cxr_gnn.data.dataset import inspect_and_load_image
+from cxr_gnn.xray_reference_gate import ChestXrayReferenceGate
 from cxr_gnn.utils import get_logger
 
 logger = get_logger(__name__)
@@ -60,6 +63,9 @@ class ChestXrayInputValidator:
         self._preprocess = None
         self._categories: list[str] = []
         self.require_dicom = os.environ.get("CXR_REQUIRE_DICOM", "false").lower() == "true"
+        default_bank = Path(__file__).resolve().parent.parent / "checkpoints" / "xray_reference_bank.npz"
+        self.reference_bank_path = Path(os.environ.get("CXR_REFERENCE_BANK", str(default_bank)))
+        self.reference_gate: ChestXrayReferenceGate | None = None
 
     @property
     def is_ready(self) -> bool:
@@ -89,6 +95,27 @@ class ChestXrayInputValidator:
             self._preprocess = None
             logger.exception("Chest-X-ray input validator could not be loaded.")
 
+        if self.reference_bank_path.is_file():
+            try:
+                threshold = float(os.environ.get("CXR_REFERENCE_THRESHOLD", "0.7287"))
+                phash_distance = int(os.environ.get("CXR_REFERENCE_PHASH_MAX_DISTANCE", "6"))
+                self.reference_gate = ChestXrayReferenceGate(
+                    self.reference_bank_path,
+                    similarity_threshold=threshold,
+                    phash_max_distance=phash_distance,
+                )
+                logger.info(
+                    "Loaded chest-X-ray reference bank from %s | threshold=%.4f | references=%d",
+                    self.reference_bank_path,
+                    threshold,
+                    len(self.reference_gate.paths),
+                )
+            except Exception:
+                self.reference_gate = None
+                logger.exception("Chest-X-ray reference bank could not be loaded.")
+        else:
+            logger.warning("Chest-X-ray reference bank not found at %s", self.reference_bank_path)
+
     def validate(self, raw_bytes: bytes, size: int) -> ValidationResult:
         """Decode and validate an upload before disease inference.
 
@@ -96,6 +123,22 @@ class ChestXrayInputValidator:
         function accepts the image.
         """
         image, checks = inspect_and_load_image(raw_bytes, size)
+
+        # The calibrated reference bank is the primary input gate.  A bank
+        # match must bypass the older heuristic/ImageNet veto rules because
+        # those rules can reject genuine tinted, square, or asymmetric X-rays.
+        if self.reference_gate is not None:
+            decision = self.reference_gate.check(io.BytesIO(raw_bytes))
+            diagnostics = {**checks, "reference_gate": decision.to_dict()}
+            if not decision.accepted:
+                return ValidationResult(
+                    image=image,
+                    accepted=False,
+                    reason="non_chest_xray",
+                    detail="This is a non-medical image, not a chest X-ray.",
+                    diagnostics=diagnostics,
+                )
+            return ValidationResult(image=image, accepted=True, diagnostics=diagnostics)
 
         if not checks["passed"]:
             reason = checks["reason"] or "non_chest_xray"
