@@ -48,8 +48,8 @@ export default function Header() {
           <Network size={22} color="#38BDF8" />
         </div>
         <div className="brand-text">
-          <h1>CXR·GNN</h1>
-          <p>graph-attention chest X-ray classifier &amp; explainable AI</p>
+          <h1>Adaptive CNN–GATv2 Fusion</h1>
+          <p>Uncertainty-Aware Conformal Prediction</p>
         </div>
       </div>
 
