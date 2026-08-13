@@ -195,3 +195,92 @@ def answer_followup(prediction: str | None, confidence: float | None, focus_regi
         return data["choices"][0]["message"]["content"].strip()
     except Exception as error:
         raise RuntimeError(f"RAG follow-up failed: {error}") from error
+
+
+def chat_assistant(message: str, conversation_history: list[dict] | None = None) -> dict:
+    """Conversational assistant for medical chest X-ray inquiries with domain restrictions.
+    
+    Accepts free-form chat while strictly maintaining domain and safety restrictions.
+    Can ask clarifying questions and engage in multi-turn conversation.
+    
+    Args:
+        message: User's current message
+        conversation_history: List of previous messages in format [{"role": "user|assistant", "content": "..."}, ...]
+    
+    Returns:
+        dict with keys: "response" (str), "can_answer" (bool), "clarifying_question" (bool)
+    """
+    if conversation_history is None:
+        conversation_history = []
+    
+    # Load all available knowledge base content
+    docs = {p.name: p.read_text(encoding="utf-8") for p in KNOWLEDGE_DIR.glob("*.txt")}
+    knowledge_context = "\n\n---\n\n".join([docs.get("system_overview.txt", ""), docs.get("cardiac.txt", ""), 
+                                             docs.get("chroniclung.txt", ""), docs.get("normal.txt", ""), 
+                                             docs.get("pleural.txt", ""), docs.get("tb.txt", "")])
+    
+    api_url = os.environ.get("LLM_API_URL", DEFAULT_API_URL)
+    api_key = _api_key(api_url)
+    if not api_key:
+        raise RuntimeError("RAG is not configured: set LLM_API_KEY in the backend environment.")
+    
+    system_prompt = (
+        "You are a medical AI assistant specialized in chest X-ray analysis and interpretation. "
+        "You engage in natural, multi-turn conversation with radiologists and medical professionals.\n\n"
+        
+        "DOMAIN RESTRICTIONS (STRICT):\n"
+        "1. ONLY answer questions about chest X-ray findings, pathologies, and analysis within your knowledge base.\n"
+        "2. ONLY discuss: Cardiac Pathology, Chronic Lung Disease, Normal findings, Pleural Pathology, Tuberculosis (TB).\n"
+        "3. DO NOT diagnose patients, prescribe medications/dosages, or suggest treatment plans.\n"
+        "4. DO NOT provide urgent care instructions or medical advice to patients.\n"
+        "5. DO NOT discuss topics outside medical imaging (e.g., coding, philosophy, politics).\n"
+        "6. If a question is outside your domain, politely decline and redirect to the knowledge base topics.\n\n"
+        
+        "ASSISTANT BEHAVIOR:\n"
+        "- Engage naturally and conversationally, not as a rigid Q&A system.\n"
+        "- Ask clarifying questions when the user's intent is unclear.\n"
+        "- Reference specific findings from the knowledge base when relevant.\n"
+        "- Acknowledge limitations (e.g., 12.1% of 'Normal' predictions are actually pathological).\n"
+        "- Provide educational context about why certain regions matter in X-ray interpretation.\n"
+        "- Suggest related topics or follow-up questions that may be helpful.\n\n"
+        
+        "SAFETY GUARDRAILS:\n"
+        "- Never claim the system is a substitute for radiologist review.\n"
+        "- Always remind users that borderline or uncertain cases need qualified radiologist review.\n"
+        "- Do not use absolutes like 'this is definitely TB' — use probabilistic language.\n"
+        "- Acknowledge the 65.04% accuracy drop on external datasets (domain shift).\n\n"
+        
+        "KNOWLEDGE BASE (use ONLY this content to answer):\n"
+        f"{knowledge_context}"
+    )
+    
+    # Build message history for API call
+    messages = []
+    # Add conversation history (limit to last 10 turns for context window)
+    if conversation_history:
+        messages.extend(conversation_history[-10:])
+    # Add current user message
+    messages.append({"role": "user", "content": message})
+    
+    payload = {
+        "model": os.environ.get("LLM_MODEL", DEFAULT_MODEL),
+        "temperature": 0.3,  # Slightly higher than RAG for conversational flow
+        "messages": [{"role": "system", "content": system_prompt}] + messages
+    }
+    
+    try:
+        data = _post_json(api_url, payload, api_key)
+        response_text = data["choices"][0]["message"]["content"].strip()
+        
+        # Determine response type
+        can_answer = "i cannot" not in response_text.lower() and "not covered" not in response_text.lower()
+        clarifying_question = any(mark in response_text for mark in ["?", "Could you clarify", "What do you mean"])
+        
+        return {
+            "response": response_text,
+            "can_answer": can_answer,
+            "clarifying_question": clarifying_question,
+            "role": "assistant"
+        }
+    except Exception as error:
+        raise RuntimeError(f"Chat assistant failed: {error}") from error

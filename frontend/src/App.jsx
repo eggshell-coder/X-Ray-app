@@ -4,7 +4,8 @@ import UploadZone from './components/UploadZone';
 import MedicalImageViewer from './components/MedicalImageViewer';
 import PredictionPanel from './components/PredictionPanel';
 import ResultAssistant from './components/ResultAssistant';
-import { Sparkles, Trash2 } from 'lucide-react';
+import ChatAssistant from './components/ChatAssistant';
+import { Sparkles, Trash2, MessageCircle, Image as ImageIcon } from 'lucide-react';
 import { getEndpoint, getTunnelHeaders } from './apiConfig';
 
 const MAX_CLIENT_UPLOAD_BYTES = 1.8 * 1024 * 1024;
@@ -63,6 +64,7 @@ export default function App() {
   const [isExplaining, setIsExplaining] = useState(false);
   const [assistantMessages, setAssistantMessages] = useState([]);
   const [isAssistantLoading, setIsAssistantLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState('analysis'); // 'analysis' or 'chat'
 
   const handleFileSelected = (file) => {
     setSelectedFile(file);
@@ -166,60 +168,90 @@ export default function App() {
     <div className="wrap">
       <Header />
 
-      <div className="grid">
-        {/* Left Column: Image Upload & Viewport */}
-        <div className="panel">
-          <p className="panel-label">
-            <span>01 — Input Image &amp; Visualizer</span>
-            {selectedFile && <span style={{ color: 'var(--cyan)' }}>{selectedFile.name}</span>}
-          </p>
-
-          {!results ? (
-            <UploadZone
-              onFileSelected={handleFileSelected}
-              previewUrl={previewUrl}
-              isAnalyzing={isAnalyzing}
-            />
-          ) : (
-            <MedicalImageViewer
-              originalUrl={previewUrl}
-              visualizations={results.visualizations}
-            />
-          )}
-
-          <div className="analyze-row">
-            <button
-              className="btn-primary"
-              onClick={handleAnalyze}
-              disabled={!selectedFile || isAnalyzing}
-            >
-              <Sparkles size={16} />
-              {isAnalyzing ? 'Analyzing…' : 'Analyze Image'}
-            </button>
-
-            {selectedFile && (
-              <button className="btn-ghost" onClick={handleClear}>
-                <Trash2 size={16} />
-                Clear
-              </button>
-            )}
-          </div>
-
-          {error && (
-            <div style={{ color: 'var(--red)', marginTop: 12, fontSize: 13, textAlign: 'center' }}>
-              {error}
-            </div>
-          )}
-        </div>
-
-        {/* Right Column: Classification Results & Report */}
-        <div className="panel">
-          <p className="panel-label">02 — Classification Result</p>
-          <PredictionPanel results={results} onExplain={handleExplain} explanation={explanation} isExplaining={isExplaining} />
-        </div>
+      {/* Tab Navigation */}
+      <div className="tab-navigation">
+        <button
+          className={`tab-button ${activeTab === 'analysis' ? 'active' : ''}`}
+          onClick={() => setActiveTab('analysis')}
+        >
+          <ImageIcon size={18} />
+          Analysis
+        </button>
+        <button
+          className={`tab-button ${activeTab === 'chat' ? 'active' : ''}`}
+          onClick={() => setActiveTab('chat')}
+        >
+          <MessageCircle size={18} />
+          Chat Assistant
+        </button>
       </div>
 
-      <ResultAssistant results={results} onAsk={handleAssistantAsk} messages={assistantMessages} isLoading={isAssistantLoading} />
+      {/* Analysis View */}
+      {activeTab === 'analysis' && (
+        <>
+          <div className="grid">
+            {/* Left Column: Image Upload & Viewport */}
+            <div className="panel">
+              <p className="panel-label">
+                <span>01 — Input Image &amp; Visualizer</span>
+                {selectedFile && <span style={{ color: 'var(--cyan)' }}>{selectedFile.name}</span>}
+              </p>
+
+              {!results ? (
+                <UploadZone
+                  onFileSelected={handleFileSelected}
+                  previewUrl={previewUrl}
+                  isAnalyzing={isAnalyzing}
+                />
+              ) : (
+                <MedicalImageViewer
+                  originalUrl={previewUrl}
+                  visualizations={results.visualizations}
+                />
+              )}
+
+              <div className="analyze-row">
+                <button
+                  className="btn-primary"
+                  onClick={handleAnalyze}
+                  disabled={!selectedFile || isAnalyzing}
+                >
+                  <Sparkles size={16} />
+                  {isAnalyzing ? 'Analyzing…' : 'Analyze Image'}
+                </button>
+
+                {selectedFile && (
+                  <button className="btn-ghost" onClick={handleClear}>
+                    <Trash2 size={16} />
+                    Clear
+                  </button>
+                )}
+              </div>
+
+              {error && (
+                <div style={{ color: 'var(--red)', marginTop: 12, fontSize: 13, textAlign: 'center' }}>
+                  {error}
+                </div>
+              )}
+            </div>
+
+            {/* Right Column: Classification Results & Report */}
+            <div className="panel">
+              <p className="panel-label">02 — Classification Result</p>
+              <PredictionPanel results={results} onExplain={handleExplain} explanation={explanation} isExplaining={isExplaining} />
+            </div>
+          </div>
+
+          <ResultAssistant results={results} onAsk={handleAssistantAsk} messages={assistantMessages} isLoading={isAssistantLoading} />
+        </>
+      )}
+
+      {/* Chat Assistant View */}
+      {activeTab === 'chat' && (
+        <div style={{ padding: '20px', minHeight: 'calc(100vh - 200px)' }}>
+          <ChatAssistant />
+        </div>
+      )}
 
       <footer>
         For research &amp; educational use only — not a diagnostic device. Model output is not a substitute for clinical judgment.

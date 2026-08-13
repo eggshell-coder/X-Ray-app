@@ -13,6 +13,7 @@ Endpoints:
 from __future__ import annotations
 import os
 import json
+from typing import Literal
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from pydantic import BaseModel, Field
@@ -21,7 +22,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.model_service import model_service
-from rag.service import explain_result, answer_followup
+from rag.service import explain_result, answer_followup, chat_assistant
 
 
 class ExplanationRequest(BaseModel):
@@ -38,6 +39,16 @@ class ChatRequest(BaseModel):
     confidence: float | None = Field(default=None, ge=0.0, le=1.0)
     focus_regions: list[str] = Field(default_factory=list, max_length=10)
     question: str = Field(min_length=1, max_length=500)
+
+
+class ConversationMessage(BaseModel):
+    role: Literal["user", "assistant"] = Field(description="Message author")
+    content: str = Field(max_length=500)
+
+
+class ConversationRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=500, description="Current user message")
+    conversation_history: list[ConversationMessage] = Field(default_factory=list, max_length=50, description="Previous messages in conversation")
 
 
 ALLOWED_CONTENT_TYPES = {
@@ -118,6 +129,22 @@ def explain(request: ExplanationRequest) -> dict:
 def chat(request: ChatRequest) -> dict:
     try:
         return {"status": "ok", "answer": answer_followup(request.prediction, request.confidence, request.focus_regions, request.question)}
+    except RuntimeError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+
+
+@app.post("/api/chat-assistant")
+def chat_with_assistant(request: ConversationRequest) -> dict:
+    """Multi-turn conversational assistant for chest X-ray medical questions.
+    
+    Maintains conversation history and responds only within medical domain restrictions.
+    Can ask clarifying questions and engage in natural dialogue.
+    """
+    try:
+        # Convert Pydantic models to dicts for the chat function
+        history = [msg.model_dump() for msg in request.conversation_history] if request.conversation_history else []
+        result = chat_assistant(request.message, history)
+        return {"status": "ok", **result}
     except RuntimeError as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
 
