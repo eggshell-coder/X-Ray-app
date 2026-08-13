@@ -54,6 +54,34 @@ def _compute_node_attention(attn_edge_index: Optional[torch.Tensor], attn_weight
     return node_attn
 
 
+def _attention_focus_summary(labels: np.ndarray, node_attention: np.ndarray, top_k: int = 3) -> list[str]:
+    """Return a compact, non-diagnostic summary of graph attention location."""
+    focus: list[str] = []
+    if labels is None or node_attention.size == 0:
+        return focus
+    height, width = labels.shape[:2]
+    top_indices = np.argsort(node_attention)[::-1][:top_k]
+    points: list[tuple[float, float]] = []
+    for node_index in top_indices:
+        ys, xs = np.where(labels == (int(node_index) + 1))
+        if len(xs) == 0:
+            continue
+        points.append((float(xs.mean() / max(width - 1, 1)), float(ys.mean() / max(height - 1, 1))))
+    if not points:
+        return focus
+    mean_x = float(np.mean([p[0] for p in points]))
+    mean_y = float(np.mean([p[1] for p in points]))
+    # Avoid pretending that coarse graph coordinates identify an organ.
+    # Report only a broad location and let the KB supply the anatomical label.
+    vertical = "upper" if mean_y < 0.34 else "lower" if mean_y > 0.66 else "central"
+    horizontal = "left" if mean_x < 0.38 else "right" if mean_x > 0.62 else "central"
+    if horizontal == "central":
+        focus.append(f"{vertical} central chest region")
+    else:
+        focus.append(f"{vertical} {horizontal} chest region")
+    return focus
+
+
 def _render_visualizations(img: np.ndarray, labels: np.ndarray, attn_edge_index: Optional[torch.Tensor], attn_weights: Optional[torch.Tensor], n_nodes: int) -> tuple[str, str]:
     """Generate base64 encoded PNG strings for Superpixel boundaries and smooth GATv2 Attention Heatmap."""
     node_attn = _compute_node_attention(attn_edge_index, attn_weights, n_nodes)
@@ -206,6 +234,10 @@ class ModelService:
             }
 
         n_superpixels = int(graph.x.shape[0])
+        focus_regions = _attention_focus_summary(
+            graph.labels,
+            _compute_node_attention(attn_edge_index, attn_weights, n_superpixels),
+        )
         sp_b64, hm_b64 = _render_visualizations(
             img, graph.labels, attn_edge_index, attn_weights, n_superpixels
         )
@@ -219,6 +251,7 @@ class ModelService:
             "probabilities": ranked,
             "n_superpixels": n_superpixels,
             "certainty_status": certainty_status,
+            "focus_regions": focus_regions,
             "energy_score": energy_score,
             "visualizations": {
                 "superpixels": sp_b64,

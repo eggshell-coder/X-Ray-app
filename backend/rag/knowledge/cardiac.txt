@@ -1,0 +1,37 @@
+[Cardiac Pathology]
+
+Key sign:
+- Cardiomegaly (enlarged cardiac silhouette, cardiothoracic ratio > 0.5)
+- Pulmonary vascular congestion
+- Pleural effusion (blunted costophrenic angle)
+- Pulmonary edema pattern (bat-wing appearance in advanced cases)
+
+Region to inspect:
+- Cardiac silhouette (center of chest)
+- Bilateral lung bases (for fluid/congestion signs)
+
+Why this region:
+An enlarged heart pushes the cardiothoracic ratio beyond the normal threshold.
+Fluid backing up from reduced cardiac function accumulates first at the
+gravity-dependent lower lung fields, producing the congestion pattern seen
+at the bases.
+
+Model reliability note:
+Cardiac Pathology is the class most frequently confused with Normal in this
+model (3 of 14 test cases misclassified as Normal). This reflects genuine
+anatomical ambiguity — borderline cardiomegaly sits on a continuum with
+normal heart size, making this the hardest boundary for the model to draw
+cleanly. Error pattern is symmetric (FNR = FDR = 0.314), indicating weak
+separation rather than a directional bias — the model misses Cardiac cases
+and raises false Cardiac alarms at equal rates. Model predictions for this
+class, especially near the confidence threshold, warrant closer radiologist
+correlation than other classes.
+
+Metrics (held-out test set, n=57, support=14):
+Precision 0.79 | Recall 0.79 | F1 0.79 | Specificity 0.899 | AUC 0.972
+
+Metrics (pooled cross-validation, support=128):
+Sensitivity 0.734 (95% CI 0.652-0.803) | Specificity 0.899 (0.865-0.925)
+PPV 0.707 (0.624-0.777) | NPV 0.911 (0.878-0.935)
+Youden's J 0.584 | G-mean 0.785 | IoU 0.522 — lowest Youden's J and
+G-mean of any class, confirming this as the weakest-separated class.

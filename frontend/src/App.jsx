@@ -3,6 +3,7 @@ import Header from './components/Header';
 import UploadZone from './components/UploadZone';
 import MedicalImageViewer from './components/MedicalImageViewer';
 import PredictionPanel from './components/PredictionPanel';
+import ResultAssistant from './components/ResultAssistant';
 import { Sparkles, Trash2 } from 'lucide-react';
 import { getEndpoint, getTunnelHeaders } from './apiConfig';
 
@@ -58,18 +59,26 @@ export default function App() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [results, setResults] = useState(null);
   const [error, setError] = useState(null);
+  const [explanation, setExplanation] = useState(null);
+  const [isExplaining, setIsExplaining] = useState(false);
+  const [assistantMessages, setAssistantMessages] = useState([]);
+  const [isAssistantLoading, setIsAssistantLoading] = useState(false);
 
   const handleFileSelected = (file) => {
     setSelectedFile(file);
     setPreviewUrl(URL.createObjectURL(file));
     setResults(null);
     setError(null);
+    setExplanation(null);
+    setAssistantMessages([]);
   };
 
   const handleClear = () => {
     setSelectedFile(null);
     setPreviewUrl(null);
     setResults(null);
+    setExplanation(null);
+    setAssistantMessages([]);
     setError(null);
   };
 
@@ -95,6 +104,8 @@ export default function App() {
       }
 
       setResults(data);
+      setExplanation(null);
+      setAssistantMessages([]);
     } catch (err) {
       const isFetchError = err instanceof TypeError && /fetch/i.test(err.message || '');
       setError(
@@ -104,6 +115,50 @@ export default function App() {
       );
     } finally {
       setIsAnalyzing(false);
+    }
+  };
+
+  const handleAssistantAsk = async (question) => {
+    if (!results || results.status !== 'ok') return;
+    setIsAssistantLoading(true);
+    try {
+      const response = await fetch(getEndpoint('/api/chat'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getTunnelHeaders() },
+        body: JSON.stringify({ prediction: results.prediction, confidence: results.confidence, focus_regions: results.focus_regions || [], question }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || 'Assistant unavailable');
+      setAssistantMessages((items) => [...items, { question, answer: data.answer }]);
+    } catch (err) {
+      setAssistantMessages((items) => [...items, { question, answer: err.message || 'Assistant unavailable' }]);
+    } finally {
+      setIsAssistantLoading(false);
+    }
+  };
+
+  const handleExplain = async () => {
+    if (!results || results.status !== 'ok') return;
+    setIsExplaining(true);
+    setExplanation(null);
+    try {
+      const response = await fetch(getEndpoint('/api/explain'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getTunnelHeaders() },
+        body: JSON.stringify({
+          prediction: results.prediction,
+          confidence: results.confidence,
+          review_needed: results.certainty_status !== 'High Confidence',
+          focus_regions: results.focus_regions || [],
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || 'Explanation unavailable');
+      setExplanation(data.answer);
+    } catch (err) {
+      setExplanation(err.message || 'Explanation unavailable');
+    } finally {
+      setIsExplaining(false);
     }
   };
 
@@ -160,9 +215,11 @@ export default function App() {
         {/* Right Column: Classification Results & Report */}
         <div className="panel">
           <p className="panel-label">02 — Classification Result</p>
-          <PredictionPanel results={results} />
+          <PredictionPanel results={results} onExplain={handleExplain} explanation={explanation} isExplaining={isExplaining} />
         </div>
       </div>
+
+      <ResultAssistant results={results} onAsk={handleAssistantAsk} messages={assistantMessages} isLoading={isAssistantLoading} />
 
       <footer>
         For research &amp; educational use only — not a diagnostic device. Model output is not a substitute for clinical judgment.

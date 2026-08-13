@@ -1,0 +1,61 @@
+TITLE: System Overview — Adaptive CNN–GATv2 Fusion Chest X-ray Screening
+
+SECTION: What This System Does
+This system classifies chest X-rays into one of five categories — Cardiac Pathology, Chronic
+Lung Disease, Normal, Pleural Pathology, or Tuberculosis (TB) — using a hybrid deep-learning
+pipeline. It is a screening/decision-support tool, not a diagnostic device, and is designed to flag
+uncertain cases for human review rather than force a confident answer on every input.
+
+SECTION: Pipeline (What Happens to an Uploaded Image)
+1. Reference gate: the uploaded image is checked against a bank of known chest X-rays using
+a perceptual hash and a composite similarity score. Images that don't resemble a chest X-ray
+are rejected before reaching the disease-classification model ("non-medical image").
+2. Preprocessing: grayscale conversion, intensity normalization, resizing.
+3. Superpixel segmentation (SLIC): the image is divided into ~180 small coherent regions.
+4. Graph construction: adjacent superpixels are connected into a Region Adjacency Graph (RAG).
+5. Feature extraction per node: a 140-dimensional feature combining a 128-dimensional deep
+feature (frozen ResNet18) and a 12-dimensional hand-crafted feature (intensity statistics,
+texture/LBP, shape/position descriptors). Edges carry a 2-dimensional feature.
+6. Classification: a two-layer GATv2 processes the graph, pools node features (mean + max),
+and produces 5-class probabilities.
+7. Uncertainty/safety check: predictions with low confidence, small top-2 margin, high entropy,
+or an out-of-distribution energy signal are flagged as "review needed" instead of a confident label.
+
+SECTION: Why a Hybrid Graph Approach Was Chosen (and Its Honest Limitation)
+An ablation study found deep ResNet18 features alone outperform the hybrid (deep + hand-crafted)
+combination (Macro-F1 0.827 vs 0.806). Hand-crafted features were retained for interpretability
+and edge-feature use. A fine-tuned end-to-end ResNet18 CNN baseline statistically significantly
+outperforms the GATv2 graph model (Macro-F1 0.857 vs 0.801, p < 0.001 after correction). This is
+a disclosed known limitation: the graph approach does not yet demonstrate an accuracy advantage
+over a strong CNN baseline; its advantage is interpretability of attention weights, not raw accuracy.
+
+SECTION: Validation Methodology (Why the Reported Numbers Can Be Trusted)
+Data was split at the image level, before augmentation, to prevent leakage. Performance was
+confirmed stable across 5-fold cross-validation (mean accuracy 78.75% ± 2.46%, closely matching
+the 82.46% held-out test result). A split-ratio sensitivity analysis (25 runs across 5 ratios and 5
+seeds) found no statistically significant difference between configurations. The model was also
+evaluated zero-shot on an external NIH ChestX-ray14 subset: accuracy dropped from 82.46% to
+65.04%, an expected degradation from domain shift and label-definition differences across
+institutions. TB performance held up almost unchanged (F1 0.98) across this domain shift.
+
+SECTION: Confidence & Calibration
+The model's raw softmax confidence is systematically under-confident: predicted confidence runs
+about 12 percentage points below actual accuracy (ECE = 0.122). This is a clinically safer failure
+mode than overconfidence. Temperature scaling is a recommended, not-yet-applied post-hoc fix.
+
+SECTION: Uncertainty Communication (Conformal Prediction)
+The system's evaluation used conformal prediction (RAPS method) to produce prediction sets with
+a formal 90% coverage guarantee instead of a single point prediction, chosen for the best
+trade-off between reliable coverage and manageable set size. In practice the system says "this
+could be one of these classes, please review" for ambiguous cases rather than forcing one label.
+
+SECTION: Key Overall Limitation to State Plainly
+The single most clinically important number in this system: when the model predicts "Normal,"
+there remains an estimated 12.1% chance the case is actually pathological (Normal class NPV =
+0.879). This is the core reason the system flags uncertain cases for review rather than treating
+any single prediction — especially Normal — as a confident all-clear.
+
+SECTION: Standing Disclaimer (Always Include)
+This system produces a statistical model output, not a clinical diagnosis. It is intended as a
+screening/triage aid. All predictions, especially borderline or flagged ones, should be confirmed
+by a qualified radiologist before any clinical decision is made.

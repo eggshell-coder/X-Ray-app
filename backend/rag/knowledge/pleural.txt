@@ -1,0 +1,34 @@
+[Pleural Pathology]
+
+Key sign:
+- Homogeneous opacification
+- Blunted costophrenic angle
+- Fluid meniscus sign at lung base
+
+Region to inspect:
+- Lower lateral lung field
+- Pleural space, costophrenic angle
+
+Why this region:
+Pleural fluid accumulates at the gravity-dependent lung base first, producing
+a characteristic homogeneous opacity with a curved upper border (meniscus)
+at the lateral costophrenic angle.
+
+Model reliability note:
+Achieved perfect recall (5/5) on the held-out test set, reflecting the
+high-contrast, spatially localized nature of this pattern. Precision is lower
+(0.71) because some Chronic Lung Disease cases are misclassified as Pleural,
+as both conditions can produce overlapping opacification patterns in the
+lower lung zones — a genuinely difficult discrimination even for experienced
+radiologists. False positives from this class are clinically low-risk, since
+they typically prompt confirmatory imaging rather than a missed finding.
+
+Metrics (held-out test set, n=57, support=5):
+Precision 0.71 | Recall 1.00 | F1 0.83 | Specificity 0.972 | AUC 0.996
+
+Metrics (pooled cross-validation, support=44):
+Sensitivity 0.909 (95% CI 0.788-0.964) | Specificity 0.972 (0.953-0.984)
+PPV 0.755 (0.624-0.851) | NPV 0.991 (0.978-0.997)
+FDR 0.258 — confirms an over-calling pattern (F2=0.878 vs F0.5=0.772):
+the model favors catching true Pleural cases at the cost of some false
+alarms, consistent with the precision/recall trade-off above.

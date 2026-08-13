@@ -6,6 +6,8 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 3000,
+    // LocalTunnel/Cloudflare assigns a new hostname during local demos.
+    allowedHosts: true,
     proxy: {
       '/api': {
         target: 'http://localhost:8080',

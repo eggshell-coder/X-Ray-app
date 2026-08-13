@@ -12,13 +12,33 @@ Endpoints:
 
 from __future__ import annotations
 import os
+import json
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
+from pydantic import BaseModel, Field
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.model_service import model_service
+from rag.service import explain_result, answer_followup
+
+
+class ExplanationRequest(BaseModel):
+    prediction: str | None = None
+    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    review_needed: bool = False
+    question: str | None = Field(default=None, max_length=500)
+    focus_regions: list[str] = Field(default_factory=list, max_length=10)
+    image_base64: str | None = Field(default=None, max_length=8_000_000)
+
+
+class ChatRequest(BaseModel):
+    prediction: str | None = None
+    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    focus_regions: list[str] = Field(default_factory=list, max_length=10)
+    question: str = Field(min_length=1, max_length=500)
+
 
 ALLOWED_CONTENT_TYPES = {
     "image/png", "image/jpeg", "image/jpg", "image/bmp", "image/tiff",
@@ -83,6 +103,23 @@ async def predict(file: UploadFile = File(...)) -> JSONResponse:
         raise HTTPException(status_code=500, detail=f"Inference failed: {e}")
 
     return JSONResponse(content=result)
+
+
+@app.post("/api/explain")
+def explain(request: ExplanationRequest) -> dict:
+    try:
+        answer = explain_result(request.prediction, request.confidence, request.review_needed, request.question, request.focus_regions)
+        return {"status": "ok", "answer": answer}
+    except RuntimeError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+
+
+@app.post("/api/chat")
+def chat(request: ChatRequest) -> dict:
+    try:
+        return {"status": "ok", "answer": answer_followup(request.prediction, request.confidence, request.focus_regions, request.question)}
+    except RuntimeError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
 
 
 # ── Serve the frontend (React dist or fallback) ────────────────────────────────

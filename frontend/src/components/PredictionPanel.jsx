@@ -1,8 +1,25 @@
 import React from 'react';
-import { ShieldCheck, AlertTriangle, ShieldAlert } from 'lucide-react';
+import { ShieldCheck, AlertTriangle, ShieldAlert, Stethoscope, Crosshair, FileText } from 'lucide-react';
 import ConfidenceGauge from './ConfidenceGauge';
 
-export default function PredictionPanel({ results }) {
+function parseExplanation(text) {
+  if (!text) return null;
+  const get = (label) => {
+    const match = text.match(new RegExp(`^${label}:\\s*(.+)$`, 'mi'));
+    return match ? match[1].trim() : '';
+  };
+  const detected = get('Detected');
+  const detectedMatch = detected.match(/^(.+?)\\s*\\(Confidence:\s*([\\d.]+)%\\)/i);
+  return {
+    prediction: detectedMatch ? detectedMatch[1].trim() : '',
+    confidence: detectedMatch ? detectedMatch[2] : '',
+    sign: get('Key sign'),
+    region: get('Region to inspect'),
+    why: get('Why'),
+  };
+}
+
+export default function PredictionPanel({ results, onExplain, explanation, isExplaining }) {
   if (!results) {
     return (
       <div className="empty-results">
@@ -91,6 +108,26 @@ export default function PredictionPanel({ results }) {
       <div className="disclaimer">
         Model output only — not a clinical diagnosis. Always confirm findings with a qualified radiologist.
       </div>
+      <button className="btn-ghost" style={{ width: '100%', marginTop: 16 }} onClick={onExplain} disabled={isExplaining}>
+        {isExplaining ? 'Preparing explanation…' : 'Explain this result'}
+      </button>
+      {explanation && (() => {
+        const card = parseExplanation(explanation);
+        if (!card) return null;
+        return (
+          <div className="ai-explanation-card">
+            <div className="ai-explanation-label">AI explanation</div>
+            <div className="ai-explanation-heading">
+              <span>{card.prediction || results.prediction}</span>
+              <span className="ai-confidence-badge">{card.confidence || (results.confidence * 100).toFixed(1)}% confidence</span>
+            </div>
+            <div className="ai-explanation-divider" />
+            {card.sign && <div className="ai-explanation-row"><Stethoscope size={15} /><span className="ai-row-label">Key sign</span><span>{card.sign}</span></div>}
+            {card.region && <div className="ai-explanation-row"><Crosshair size={15} /><span className="ai-row-label">Region</span><span>{card.region}</span></div>}
+            {card.why && <div className="ai-explanation-row"><FileText size={15} /><span className="ai-row-label">Why</span><span>{card.why}</span></div>}
+          </div>
+        );
+      })()}
     </div>
   );
 }

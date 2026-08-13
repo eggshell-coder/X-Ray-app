@@ -1,0 +1,36 @@
+[Chronic Lung Disease]
+
+Key sign:
+- Fibrotic scarring
+- Irregular, diffuse opacities
+- Architectural distortion of lung markings
+
+Region to inspect:
+- Variable — most often lower or mid lung zones, but can be diffuse
+  across both lungs
+
+Why this region:
+Chronic fibrotic changes develop gradually and unevenly across affected lung
+tissue, so unlike TB or Pleural Pathology there isn't one dominant anatomical
+hotspot — the pattern is distributed rather than localized.
+
+Model reliability note:
+This is the weakest-performing class in the model (recall 0.40, F1 0.50) —
+the most distributed error pattern of any class, with cases misclassified
+toward both Normal and Pleural Pathology. The confusion with Pleural in
+particular reflects real overlapping radiographic appearance in the lower
+lung zones. Model output for this class should be treated as lower
+confidence by default, and flagged for radiologist review even at moderate-
+to-high softmax confidence.
+
+Metrics (held-out test set, n=57, support=5):
+Precision 0.67 | Recall 0.40 | F1 0.50 | Specificity 0.970 | AUC 0.935
+
+Metrics (pooled cross-validation, support=45):
+Sensitivity 0.778 (95% CI 0.637-0.875) | Specificity 0.970 (0.950-0.982)
+PPV 0.714 (0.576-0.822) | NPV 0.978 (0.961-0.988)
+Youden's J 0.805 | G-mean 0.901 | IoU 0.618
+Note: sensitivity is notably higher on the pooled CV set than the small
+held-out test set (0.778 vs 0.40) — support=5 in the held-out test makes
+that recall figure unstable; treat the CV numbers as the more reliable
+estimate of this class's true performance.

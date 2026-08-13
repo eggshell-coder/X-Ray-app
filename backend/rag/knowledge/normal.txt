@@ -1,0 +1,40 @@
+[Normal]
+
+Key sign:
+- No significant opacities, consolidation, or effusion
+- Cardiothoracic ratio within normal range (< 0.5)
+- Clear costophrenic angles
+- Normal lung markings without fibrotic or nodular pattern
+
+Region to inspect:
+- Whole-lung survey (no single localized region) — specifically confirm
+  cardiac silhouette size and both costophrenic angles are unremarkable
+
+Why this matters:
+A "Normal" prediction is a negative finding — it means the model did not
+detect the sign patterns associated with TB, Cardiac Pathology, Pleural
+Pathology, or Chronic Lung Disease. It is not a confirmation of health, only
+an absence of the specific patterns the model was trained to recognize.
+
+Model reliability note:
+This is a class where a false "Normal" prediction carries real clinical risk.
+On the pooled cross-validation set (support=171), when the model predicts
+Normal there remains roughly a 12.1% residual probability that the case is
+actually pathological (NPV = 0.879, 95% CI 0.840-0.909) — most often an
+early-stage or borderline Cardiac Pathology case being read as Normal. This
+motivates treating Normal predictions, especially at moderate confidence,
+with the same review threshold as other classes rather than assuming an
+automatic pass. On the smaller held-out test set (n=57, support=19), the
+most frequent confusions were: misread as Cardiac (3 cases) or, less often,
+Chronic Lung Disease (1 case) — no Normal case was misclassified as TB or
+Pleural, meaning the model's errors on this class are conservative rather
+than catastrophic.
+
+Metrics (held-out test set, n=57, support=19):
+Precision 0.79 | Recall 0.79 | F1 0.79 | Specificity 0.909 | AUC 0.940
+
+Metrics (pooled cross-validation, support=171):
+Sensitivity 0.749 (95% CI 0.679-0.808) | Specificity 0.909 (0.874-0.935)
+PPV 0.805 (0.737-0.859) | NPV 0.879 (0.840-0.909)
+FNR 0.253 — this is the more clinically consequential error mode for this
+class (missing true Normal cases) versus the false-positive rate (FPR 0.089).
