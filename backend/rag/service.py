@@ -212,6 +212,17 @@ def chat_assistant(message: str, conversation_history: list[dict] | None = None)
     """
     if conversation_history is None:
         conversation_history = []
+
+    # Do not send meaningless one-character input to the LLM. With the full
+    # knowledge base in its context, a model can otherwise try to guess an
+    # intended topic and return unrelated performance terminology.
+    if len(re.sub(r"[^a-zA-Z0-9]", "", message)) < 2:
+        return {
+            "response": "Please ask a specific question about chest X-ray findings, TB, cardiac, pleural, chronic lung, or normal findings.",
+            "can_answer": False,
+            "clarifying_question": True,
+            "role": "assistant",
+        }
     
     # Load all available knowledge base content
     docs = {p.name: p.read_text(encoding="utf-8") for p in KNOWLEDGE_DIR.glob("*.txt")}
@@ -235,12 +246,14 @@ def chat_assistant(message: str, conversation_history: list[dict] | None = None)
         "4. DO NOT provide urgent care instructions or medical advice to patients.\n"
         "5. DO NOT discuss topics outside medical imaging (e.g., coding, philosophy, politics).\n"
         "6. If a question is outside your domain, politely decline and redirect to the knowledge base topics.\n\n"
+        "7. Never guess what an unclear word, acronym, typo, or very short message means. Ask the user to clarify instead.\n"
+        "8. Do not mention FDR, FPR, domain shift, external datasets, accuracy figures, or other model-performance details unless the user explicitly asks about that exact model-performance topic.\n\n"
         
         "ASSISTANT BEHAVIOR:\n"
         "- Engage naturally and conversationally, not as a rigid Q&A system.\n"
         "- Ask clarifying questions when the user's intent is unclear.\n"
         "- Reference specific findings from the knowledge base when relevant.\n"
-        "- Acknowledge limitations (e.g., 12.1% of 'Normal' predictions are actually pathological).\n"
+        "- Discuss model limitations only when the user asks about reliability, confidence, performance, or limitations.\n"
         "- Provide educational context about why certain regions matter in X-ray interpretation.\n"
         "- Suggest related topics or follow-up questions that may be helpful.\n\n"
         
@@ -248,7 +261,7 @@ def chat_assistant(message: str, conversation_history: list[dict] | None = None)
         "- Never claim the system is a substitute for radiologist review.\n"
         "- Always remind users that borderline or uncertain cases need qualified radiologist review.\n"
         "- Do not use absolutes like 'this is definitely TB' — use probabilistic language.\n"
-        "- Acknowledge the 65.04% accuracy drop on external datasets (domain shift).\n\n"
+        "- Never invent explanations, definitions, or related topics that are not directly asked for.\n\n"
         
         "KNOWLEDGE BASE (use ONLY this content to answer):\n"
         f"{knowledge_context}"
